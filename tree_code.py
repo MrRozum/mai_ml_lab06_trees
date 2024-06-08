@@ -86,27 +86,26 @@ def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
     if len(unique_thresholds) == 1:
         return unique_thresholds, np.array([parent_gini]), best_threshold, parent_gini
       
-    for threshold in unique_thresholds:
-        left_mask, right_mask = _split_data(feature_vector, threshold)
-        left_target, right_target = target_vector[left_mask], target_vector[right_mask]
-        igain = _calc_information_gain(parent_gini, left_target, right_target)
-        
-        # skip iter if there is no split
-        # if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
-        #     continue
-        
-        # Update best params
-        ginis.append(igain)
-        if igain > best_gain:
-            best_gain = igain
-            best_threshold = threshold
-        elif igain == best_gain and threshold < best_threshold:
-            best_threshold = threshold
-        
-        # Best Gini after split
-        gini_best = parent_gini - best_gain
-        
-    return unique_thresholds, np.array(ginis), best_threshold, gini_best
+    # Vectorized approach for information gain calculation
+    left_masks = feature_vector_sorted[:, np.newaxis] <= unique_thresholds
+    right_masks = ~left_masks
+    
+    left_counts = np.sum(left_masks, axis=0)
+    right_counts = len(feature_vector_sorted) - left_counts
+    
+    left_ginis = np.array([_calc_gini(target_vector_sorted[left_mask]) for left_mask in left_masks.T])
+    right_ginis = np.array([_calc_gini(target_vector_sorted[right_mask]) for right_mask in right_masks.T])
+    
+    left_weights = left_counts / len(feature_vector_sorted)
+    right_weights = right_counts / len(feature_vector_sorted)
+    
+    ginis = parent_gini - (left_weights * left_ginis + right_weights * right_ginis)
+    
+    best_idx = np.argmax(ginis)
+    best_threshold = unique_thresholds[best_idx]
+    gini_best = parent_gini - ginis[best_idx]
+    
+    return unique_thresholds, ginis, best_threshold, gini_best
 
 
 class DecisionTree:
