@@ -1,8 +1,7 @@
 import numpy as np
 from collections import Counter
 
-
-def find_best_split(feature_vector, target_vector):
+def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
     """
     Находит оптимальный порог для разбиения вектора признака по критерию Джини.
 
@@ -48,9 +47,66 @@ def find_best_split(feature_vector, target_vector):
         Оптимальное значение критерия Джини.
 
     """
-    # ╰( ͡☉ ͜ʖ ͡☉ )つ──☆*:・ﾟ   ฅ^•ﻌ•^ฅ   ʕ•ᴥ•ʔ
+    
+    def _split_data(feature_vector: np.ndarray, threshold: float):
+        left_mask = feature_vector <= threshold
+        right_mask = feature_vector > threshold
+        return left_mask, right_mask
 
-    pass
+    def _calc_gini(target_vector: np.ndarray):
+        m = len(target_vector)
+        if m == 0 or m ==1:
+            return 0
+        p1 = np.sum(target_vector == 1) / m
+        p0 = 1 - p1
+        return 1 - np.sum(np.square([p0, p1]))
+
+    def _calc_information_gain(parent_gini: float, left_target: np.ndarray, right_target: np.ndarray):
+        m = len(left_target) + len(right_target)
+        left_weight = len(left_target) / m
+        right_weight = 1 - left_weight
+        return parent_gini - (left_weight * _calc_gini(left_target) + right_weight * _calc_gini(right_target))
+    
+    assert len(feature_vector) == len(target_vector), "Feature vector and target vector must have the same length"
+    
+    # Сортировка по индексу для разбиения на удобной генерации thresholds.
+    sorted_indices = np.argsort(feature_vector)
+    feature_vector_sorted = feature_vector[sorted_indices]
+    target_vector_sorted = target_vector[sorted_indices]
+    
+    # Уникальные точки сплитования
+    unique_thresholds = np.unique((feature_vector_sorted[:-1] + feature_vector_sorted[1:]) / 2)
+    
+    parent_gini = _calc_gini(target_vector)
+    ginis = []
+    best_gain = -1
+    best_threshold = unique_thresholds[0]
+    
+    # Поведение при константном атрибуте
+    if len(unique_thresholds) == 1:
+        return unique_thresholds, np.array([parent_gini]), best_threshold, parent_gini
+      
+    for threshold in unique_thresholds:
+        left_mask, right_mask = _split_data(feature_vector, threshold)
+        left_target, right_target = target_vector[left_mask], target_vector[right_mask]
+        igain = _calc_information_gain(parent_gini, left_target, right_target)
+        
+        # skip iter if there is no split
+        # if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
+        #     continue
+        
+        # Update best params
+        ginis.append(igain)
+        if igain > best_gain:
+            best_gain = igain
+            best_threshold = threshold
+        elif igain == best_gain and threshold < best_threshold:
+            best_threshold = threshold
+        
+        # Best Gini after split
+        gini_best = parent_gini - best_gain
+        
+    return unique_thresholds, np.array(ginis), best_threshold, gini_best
 
 
 class DecisionTree:
