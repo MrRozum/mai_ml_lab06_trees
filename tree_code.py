@@ -47,12 +47,6 @@ def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
         Оптимальное значение критерия Джини.
 
     """
-    
-    def _split_data(feature_vector: np.ndarray, threshold: float):
-        left_mask = feature_vector <= threshold
-        right_mask = feature_vector > threshold
-        return left_mask, right_mask
-
     def _calc_gini(target_vector: np.ndarray):
         m = len(target_vector)
         if m == 0 or m ==1:
@@ -60,13 +54,7 @@ def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
         p1 = np.sum(target_vector == 1) / m
         p0 = 1 - p1
         return 1 - np.sum(np.square([p0, p1]))
-
-    def _calc_information_gain(parent_gini: float, left_target: np.ndarray, right_target: np.ndarray):
-        m = len(left_target) + len(right_target)
-        left_weight = len(left_target) / m
-        right_weight = 1 - left_weight
-        return parent_gini - (left_weight * _calc_gini(left_target) + right_weight * _calc_gini(right_target))
-    
+  
     assert len(feature_vector) == len(target_vector), "Feature vector and target vector must have the same length"
     
     # Сортировка по индексу для разбиения на удобной генерации thresholds.
@@ -75,11 +63,16 @@ def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
     target_vector_sorted = target_vector[sorted_indices]
     
     # Уникальные точки сплитования
-    unique_thresholds = np.unique((feature_vector_sorted[:-1] + feature_vector_sorted[1:]) / 2)
+    # unique_thresholds = np.unique((feature_vector_sorted[:-1] + feature_vector_sorted[1:]) / 2)
+    unique_thresholds = np.unique(feature_vector)
+    if len(unique_thresholds) == 1:
+        return np.array([]), np.array([]), None, None
+
+    unique_thresholds = (unique_thresholds[:-1] + unique_thresholds[1:]) / 2
     
     parent_gini = _calc_gini(target_vector)
     ginis = []
-    best_gain = -1
+    # best_gain = -1
     best_threshold = unique_thresholds[0]
     
     # Поведение при константном атрибуте
@@ -107,7 +100,6 @@ def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
     
     return unique_thresholds, ginis, best_threshold, gini_best
 
-
 class DecisionTree:
     def __init__(
         self,
@@ -125,7 +117,7 @@ class DecisionTree:
         self._min_samples_split = min_samples_split
         self._min_samples_leaf = min_samples_leaf
 
-    def _fit_node(self, sub_X, sub_y, node):
+    def _fit_node(self, sub_X: np.ndarray, sub_y: np.ndarray, node: dict):
         """
         Обучение узла дерева решений.
 
@@ -141,12 +133,14 @@ class DecisionTree:
             Узел дерева, который будет заполнен информацией о разбиении.
 
         """
-        if np.all(sub_y == sub_y[0]):
+        
+        if np.all(sub_y == sub_y[0]) or sub_X.shape[0] <= 1:
             node["type"] = "terminal"
             node["class"] = sub_y[0]
             return
 
-        feature_best, threshold_best, gini_best, split = None, None, None, None
+        feature_best, threshold_best, split, gini_best = None, None, None, None
+        
 
         for feature in range(sub_X.shape[1]):
             feature_type = self._feature_types[feature]
@@ -171,8 +165,8 @@ class DecisionTree:
                 continue
 
             _, _, threshold, gini = find_best_split(feature_vector, sub_y)
-
-            if gini_best is None or gini > gini_best:
+            
+            if gini_best is None or gini < gini_best:
                 feature_best = feature
                 gini_best = gini
                 split = feature_vector < threshold
@@ -183,7 +177,7 @@ class DecisionTree:
                     threshold_best = [
                         k for k, v in categories_map.items() if v < threshold
                     ]
-
+            
         if feature_best is None:
             node["type"] = "terminal"
             node["class"] = Counter(sub_y).most_common(1)[0][0]
@@ -222,8 +216,22 @@ class DecisionTree:
         int
             Предсказанный класс объекта.
         """
-        # ╰( ͡☉ ͜ʖ ͡☉ )つ──☆*:・ﾟ   ฅ^•ﻌ•^ฅ   ʕ•ᴥ•ʔ
-        pass
+        
+        if node["type"] == "terminal":
+            return node["class"]
+
+        if self._feature_types[node["feature_split"]] == "real":
+            if x[node["feature_split"]] <= node["threshold"]:
+                return self._predict_node(x, node["left_child"])
+            else:
+                return self._predict_node(x, node["right_child"])
+        elif self._feature_types[node["feature_split"]] == "categorical":
+            if x[node["feature_split"]] in node["categories_split"]:
+                return self._predict_node(x, node["left_child"])
+            else:
+                return self._predict_node(x, node["right_child"])
+        else:
+            raise ValueError("Incorrect feature type")
 
     def fit(self, X, y):
         self._fit_node(X, y, self._tree)
