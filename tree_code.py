@@ -1,5 +1,6 @@
 import numpy as np
 from collections import Counter
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
     """
@@ -100,7 +101,7 @@ def find_best_split(feature_vector: np.ndarray, target_vector: np.ndarray):
     
     return unique_thresholds, ginis, best_threshold, gini_best
 
-class DecisionTree:
+class DecisionTree(BaseEstimator, ClassifierMixin):
     def __init__(
         self,
         feature_types,
@@ -237,7 +238,9 @@ class DecisionTree:
         self._fit_node(X, y, self._tree)
 
     def predict(self, X):
-        predicted = []
-        for x in X:
-            predicted.append(self._predict_node(x, self._tree))
+        predicted = [self._predict_node(x, self._tree) for x in X]
         return np.array(predicted)
+    
+    def score(self, X, y):
+        predictions = self.predict(X)
+        return np.mean(predictions == y)
